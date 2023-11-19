@@ -35,10 +35,10 @@ func Start(opts StartOptions) {
 
 	game := &game.Game{Reader}
 
-	termscreen, err := tcell.NewTerminfoScreen()
+	screen, err := tcell.NewScreen()
 	if err != nil {
 		panic(err)
 	}
 
-	game.Run(termscreen)
+	game.Run(screen)
 }

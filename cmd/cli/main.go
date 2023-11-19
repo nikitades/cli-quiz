@@ -7,8 +7,8 @@ import (
 )
 
 func main() {
-	mode := flag.String("mode", "", "h for hardcode, csv for csv; default: h")
-	csvPath := flag.String("csvpath", "", "absolute path to csv file")
+	mode := flag.String("mode", "h", "h for hardcode, csv for csv; default: h")
+	csvPath := flag.String("csvpath", "", "absolute path to csv file; format: 1+1,2:2:7,1:1")
 
 	flag.Parse()
 

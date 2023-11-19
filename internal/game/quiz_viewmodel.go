@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"time"
 
 	"github.com/rivo/tview"
 )
@@ -19,10 +20,11 @@ type quizViewModel struct {
 
 const initialText = `[green]Quiz [white]Game!
 
-- You will be offered a set of questions. Try and answer these, to achieve [red]victory[white]!`
+- You will be offered a set of questions. Try and answer these, to achieve [red]victory[white]!
+- You will be given 30 seconds to answer each question, the game ends otherwise`
 
 func newQuizViewModel(app *tview.Application) *quizViewModel {
-	maingrid := tview.NewGrid().SetRows(3, 0, 3).SetBorders(true)
+	maingrid := tview.NewGrid().SetRows(5, 0, 3).SetBorders(true)
 
 	header := tview.NewTextView().SetTextAlign(tview.AlignLeft).SetDynamicColors(true)
 	header.SetBorderPadding(0, 0, 5, 0)
@@ -68,7 +70,7 @@ func (qvm *quizViewModel) Start(questions []Question) {
 
 func (qvm *quizViewModel) ServeQuestions(questions []Question) {
 	if len(questions) == 0 {
-		qvm.NoQuestionsWarning()
+		qvm.ShowError(fmt.Errorf("The source contains no questions!"))
 		return
 	}
 
@@ -85,14 +87,49 @@ func (qvm *quizViewModel) showQuestion(questions []Question, next int) {
 
 	question := questions[next]
 
-	qvm.currentQuestion.SetText(question.Title)
+	enoughChan := make(chan int)
+	timeChan := make(chan int)
+
+	go func() {
+		for {
+			select {
+			case <-enoughChan:
+				return
+			case timeChan <- 0:
+				time.Sleep(time.Second)
+			}
+		}
+	}()
+
+	go func() {
+		timeLimit := 30
+		for {
+			select {
+			case <-timeChan:
+				qvm.currentQuestion.SetText(fmt.Sprintf("%v (%d)", question.Title, timeLimit))
+				qvm.app.ForceDraw()
+				timeLimit--
+				if timeLimit <= 0 {
+					enoughChan <- 0
+					close(enoughChan)
+					qvm.showQuitOption()
+					qvm.currentQuestion.SetText("Time is up! 👺")
+					qvm.app.ForceDraw()
+				}
+			case <-enoughChan:
+				return
+			}
+		}
+	}()
 
 	for i, opt := range question.Options {
 		qn := i
-		qvm.options.AddItem(opt, strconv.Itoa(qn+1), rune(strconv.Itoa(qn+1)[0]), func() {
+		qvm.options.AddItem(opt, strconv.Itoa(qn+1), rune(strconv.Itoa(qn + 1)[0]), func() {
 			if slices.Contains(question.CorrectOptions, qn+1) {
+				enoughChan <- 0
 				qvm.showQuestion(questions, next+1)
 			} else {
+				enoughChan <- 0
 				qvm.Fail()
 			}
 		})
@@ -104,18 +141,18 @@ func (qvm *quizViewModel) Fail() {
 	qvm.currentQuestion.SetText("[red]Faileeeed!!!!! [teal]Arrrrarrr [white]Now you have to restart the quiz to try again!")
 }
 
-func (qvm *quizViewModel) NoQuestionsWarning() {
-	qvm.options.Clear()
-	qvm.currentQuestion.SetText("The source contains [black]no [white]questions!")
-}
-
 func (qvm *quizViewModel) Success(questionsCount int) {
 	qvm.currentQuestion.SetText(
 		fmt.Sprintf("[green]CONGRATULATIONS! You did it! You solved %d question(s)!", questionsCount),
 	)
+	qvm.showQuitOption()
 }
 
 func (qvm *quizViewModel) ShowError(err error) {
 	qvm.options.Clear()
 	qvm.currentQuestion.SetText(fmt.Sprintf("[orange]Error! [white]<[red]%s[white]>", err))
+}
+
+func (qvm *quizViewModel) showQuitOption() {
+	qvm.options.Clear().AddItem("Press Q to quit", "exits the app", 'q', qvm.app.Stop)
 }

@@ -86,35 +86,23 @@ func (qvm *quizViewModel) showQuestion(questions []Question, next int) {
 	}
 
 	question := questions[next]
-
 	enoughChan := make(chan int)
-	timeChan := make(chan int)
 
+	timeLimit := 30
+	qvm.currentQuestion.SetText(fmt.Sprintf("%v (%d)", question.Title, timeLimit))
 	go func() {
 		for {
 			select {
-			case <-enoughChan:
-				return
-			case timeChan <- 0:
-				time.Sleep(time.Second)
-			}
-		}
-	}()
-
-	go func() {
-		timeLimit := 30
-		for {
-			select {
-			case <-timeChan:
+			case <-time.NewTicker(time.Second).C:
+				timeLimit--
 				qvm.currentQuestion.SetText(fmt.Sprintf("%v (%d)", question.Title, timeLimit))
 				qvm.app.ForceDraw()
-				timeLimit--
 				if timeLimit <= 0 {
-					enoughChan <- 0
-					close(enoughChan)
 					qvm.showQuitOption()
 					qvm.currentQuestion.SetText("Time is up! 👺")
 					qvm.app.ForceDraw()
+					enoughChan <- 0
+					close(enoughChan)
 				}
 			case <-enoughChan:
 				return
